@@ -1,37 +1,59 @@
-//Adafruit CL53L0X QT || P3317D
+#include <Wire.h>
+#include <Adafruit_VL53L0X.h>
 
-import time
-import board
-import busio
-import adafruit_vl53l0x
+// Initialize the VL53L0X sensor
+Adafruit_VL53L0X lox = Adafruit_VL53L0X();
 
-# Initialize I2C bus and VL53L0X sensor
-i2c = busio.I2C(board.SCL, board.SDA)
+// Distance threshold (adjust based on setup)
+const int THRESHOLD = 500;  // mm (set to detect blade passing)
+const float DEBOUNCE_TIME = 0.2;  // seconds (to avoid multiple detections per pass)
 
+unsigned long previousTime = 0; // Variable to store the previous time in milliseconds
 
-tof = adafruit_vl53l0x.VL53L0X(i2c)
+void setup() {
+  // Start serial communication for debugging
+  Serial.begin(115200);
+  while (!Serial); // Wait for the serial to initialize
 
-# Distance threshold (adjust based on setup)
-THRESHOLD = 500  # mm (set to detect blade passing)
-DEBOUNCE_TIME = 0.2  # seconds (to avoid multiple detections per pass)
+  // Initialize I2C communication
+  Wire.begin();
 
-previous_time = None
+  // Initialize the VL53L0X sensor
+  if (!lox.begin()) {
+    Serial.println("Failed to initialize VL53L0X sensor!");
+    while (1);
+  }
 
-print("Measuring Wind Turbine Speed...")
+  // Print a message
+  Serial.println("Measuring Wind Turbine Speed...");
+}
 
-while True:
-    distance = tof.range  # Get distance in mm
+void loop() {
+  // Read the current distance in mm
+  uint16_t distance = lox.readRange();  // Use readRange() instead of readRangeSingleMillimeters()
 
-    if distance < THRESHOLD:  # Detect blade passing
-        current_time = time.monotonic()  # Use monotonic time to avoid clock issues
+  // Check if the distance is below the threshold (indicating blade passing)
+  if (distance < THRESHOLD) {
+    unsigned long currentTime = millis();  // Get the current time in milliseconds
 
-        if previous_time is not None:
-            delta_t = current_time - previous_time
-            if delta_t > DEBOUNCE_TIME:  # Avoid false multiple detections
-                rpm = 60 / delta_t
-                print(f"Blade Speed: {rpm:.2f} RPM")
-                previous_time = current_time
-        else:
-            previous_time = current_time  # Set initial time
+    if (previousTime != 0) {
+      unsigned long deltaTime = currentTime - previousTime; // Calculate the time difference
 
-    time.sleep(0.01)  # Small delay to reduce CPU usage
+      // Avoid false multiple detections using debounce time
+      if (deltaTime > DEBOUNCE_TIME * 1000) {  // Convert debounce time to milliseconds
+        float rpm = 60000.0 / deltaTime;  // Calculate RPM (60,000 ms / deltaTime)
+        Serial.print("Blade Speed: ");
+        Serial.print(rpm, 2);  // Print RPM with 2 decimal places
+        Serial.println(" RPM");
+
+        // Update the previous time
+        previousTime = currentTime;
+      }
+    } else {
+      // Set initial time
+      previousTime = currentTime;
+    }
+  }
+
+  delay(3);  // Small delay to reduce CPU usage
+}
