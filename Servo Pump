@@ -1,0 +1,14 @@
+#include <Servo.h>
+
+Servo myServo;  // Create a servo object
+
+const int servoPin = 9;  // Pin connected to the servo signal wire
+
+void setup() {
+  myServo.attach(servoPin);  // Attach the servo to the pin
+}
+
+void loop() {
+  myServo.write(0);   // Full speed in one direction
+  // myServo.write(180);  // Uncomment for full speed in the opposite direction
+}
