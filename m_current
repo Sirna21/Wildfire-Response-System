@@ -1,0 +1,124 @@
+#include "Adafruit_seesaw.h"
+#include <Wire.h>
+#include <Adafruit_VL53L0X.h>
+
+// Create an instance of the Adafruit_seesaw class to interact with the sensor
+Adafruit_seesaw ss;
+
+// Initialize the VL53L0X sensor
+Adafruit_VL53L0X lox = Adafruit_VL53L0X();
+
+// Constants
+const int MOISTURE_THRESHOLD = 740;  // Threshold for moisture (below this = dry soil)
+const int TEMP_THRESHOLD = 30;       // Threshold for temperature (above this = hot)
+const int THRESHOLD = 500;           // Distance threshold (set to detect blade passing)
+const float DEBOUNCE_TIME = 0.2;    // Seconds (to avoid multiple detections per pass)
+const int SPEED_THRESHOLD = 30;     // Threshold for wind speed (above this = strong winds)
+
+// Blade radius in meters (change this value to match your turbine's blade radius)
+const float BLADE_RADIUS = 5.0;  // Blade radius in meters
+
+// Variables
+unsigned long previousTime = 0;  // To store the previous time in milliseconds
+
+void setup() {
+  // Start serial communication for debugging
+  Serial.begin(115200);
+
+  // Initialize seesaw sensor
+  if (!ss.begin(0x36)) {
+    Serial.println("ERROR! seesaw not found");
+    while (1) delay(1);
+  } else {
+    Serial.println("seesaw started!");
+  }
+
+  // Initialize I2C communication for VL53L0X
+  Wire.begin();
+  if (!lox.begin()) {
+    Serial.println("Failed to initialize VL53L0X sensor!");
+    while (1);
+  }
+
+  Serial.println("Measuring Wind Turbine Speed...");
+}
+
+void loop() {
+  //conditions variable at the start of the loop
+  int conditionCount = 0;  // Variable to count how many times a condition is met
+  
+  // Read soil moisture and temperature
+  float temp = ss.getTemp();
+  uint16_t touch = ss.touchRead(0);
+
+  // Print soil sensor readings
+  Serial.print("Temperature: ");
+  Serial.print(temp);
+  Serial.println(" *C");
+
+  Serial.print("Capacitive: ");
+  Serial.println(touch);
+
+  
+
+  // Check moisture condition
+  if (touch <= MOISTURE_THRESHOLD) {
+    Serial.println("Moisture condition met: Dry soil");
+    conditionCount++;
+  }
+
+  // Check temperature condition
+  if (temp >= TEMP_THRESHOLD) {
+    Serial.println("Temperature condition met: Hot");
+    conditionCount++;
+  }
+
+  // Read the distance from the VL53L0X sensor
+  uint16_t distance = lox.readRange();
+
+  // Check for valid reading from VL53L0X
+  if (lox.timeoutOccurred()) {
+    Serial.println("VL53L0X timeout occurred.");
+  } else if (distance < THRESHOLD) {
+    unsigned long currentTime = millis();  // Get current time in ms
+
+    if (previousTime != 0) {
+      unsigned long deltaTime = currentTime - previousTime;
+
+      // Avoid false multiple detections using debounce time
+      if (deltaTime > DEBOUNCE_TIME * 1000) {
+        // Calculate RPM (60,000 ms / deltaTime)
+        float rpm = 60000.0 / deltaTime;
+
+        // Calculate the circumference of the blade in kilometers
+        float circumference = 2 * 3.14159 * BLADE_RADIUS;  // Circumference in meters
+        float circumferenceInKm = circumference / 1000.0;  // Convert to kilometers
+
+        // Convert RPM to km/h
+        float speedKmPerHr = rpm * circumferenceInKm * 60.0;
+
+        // Print the speed in km/h
+        Serial.print("Blade Speed: ");
+        Serial.print(speedKmPerHr, 2);  // Print speed with 2 decimal places
+        Serial.println(" km/h");
+
+        // Check if the wind speed exceeds the threshold for strong winds
+        if (speedKmPerHr >= SPEED_THRESHOLD) {
+          Serial.println("Wind speed condition met: Strong winds");
+          conditionCount++;
+        }
+
+        previousTime = currentTime;
+      }
+    } else {
+      // Set initial time
+      previousTime = currentTime;
+    }
+  }
+
+  // Print the condition count
+  Serial.print("Condition Count: ");
+  Serial.println(conditionCount);
+
+  delay(50);  // Adjusted delay to prevent overloading the serial output
+}
