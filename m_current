@@ -1,12 +1,16 @@
 #include "Adafruit_seesaw.h"
 #include <Wire.h>
 #include <Adafruit_VL53L0X.h>
+#include <Servo.h>
 
 // Create an instance of the Adafruit_seesaw class to interact with the sensor
 Adafruit_seesaw ss;
 
 // Initialize the VL53L0X sensor
 Adafruit_VL53L0X lox = Adafruit_VL53L0X();
+
+// Initialize pump (servo motor)
+Servo myServo;
 
 // Constants
 const int MOISTURE_THRESHOLD = 740; // Threshold for moisture (below this = dry soil)
@@ -20,11 +24,15 @@ const float BLADE_RADIUS = 5.0;  // Blade radius in meters
 
 // Variables
 unsigned long previousTime = 0; // To store the previous time in milliseconds
+unsigned long startTime = 0;    // Time of first blade pass
+unsigned long totalTime = 0;    // Total time for 4 blade passes
+int bladeCount = 0;             // To count blade passes
+float speedKmPerHr = 0.0;       // Declare speedKmPerHr here for global access
 
 void setup() {
   // Start serial communication for debugging
   Serial.begin(115200);
-
+  
   // Initialize seesaw sensor
   if (!ss.begin(0x36)) {
     Serial.println("ERROR! seesaw not found");
@@ -40,6 +48,10 @@ void setup() {
     while (1);
   }
 
+  // Initialize Servo
+  myServo.attach(9);
+  myServo.write(0);  // Initial state (pump off)
+  
   Serial.println("Measuring Wind Turbine Speed...");
 }
 
@@ -50,23 +62,13 @@ void loop() {
   float temp = ss.getTemp();
   uint16_t touch = ss.touchRead(0);
 
-  // Print soil sensor readings
-  Serial.print("Temperature: ");
-  Serial.print(temp);
-  Serial.println(" *C");
-
-  Serial.print("Capacitive: ");
-  Serial.println(touch);
-
   // Check moisture condition
   if (touch <= MOISTURE_THRESHOLD) {
-    Serial.println("Moisture condition met: Dry soil");
     conditionCount++;  // Increment count when condition is met
   }
 
   // Check temperature condition
   if (temp >= TEMP_THRESHOLD) {
-    Serial.println("Temperature condition met: Hot");
     conditionCount++;  // Increment count when condition is met
   }
 
@@ -82,26 +84,31 @@ void loop() {
 
       // Avoid false multiple detections using debounce time
       if (deltaTime > DEBOUNCE_TIME * 1000) {
-        float rpm = 60000.0 / deltaTime;  // Calculate RPM (60,000 ms / deltaTime)
-
-        // Calculate the circumference of the blade in kilometers
-        float circumference = 2 * 3.14159 * BLADE_RADIUS;  // Circumference in meters
-        float circumferenceInKm = circumference / 1000.0;  // Convert to kilometers
-
-        // Convert RPM to km/h
-        float speedKmPerHr = rpm * circumferenceInKm * 60.0;
-
-        // Print the speed in km/h
-        Serial.print("Blade Speed: ");
-        Serial.print(speedKmPerHr, 2);  // Print speed with 2 decimal places
-        Serial.println(" km/h");
-
-        // Check if the wind speed exceeds the threshold for strong winds
-        if (speedKmPerHr >= SPEED_THRESHOLD) {
-          Serial.println("Wind speed condition met: Strong winds");
-          conditionCount++;  // Increment count when wind speed condition is met
+        if (bladeCount == 0) {
+          // Start the timer on the first blade pass
+          startTime = currentTime;
         }
-        
+
+        bladeCount++;  // Increment blade pass count
+
+        // Check if 4 blades have passed (1 full rotation)
+        if (bladeCount >= 4) {
+          totalTime = currentTime - startTime;  // Calculate total time for 4 blades
+
+          // Calculate RPM based on 4 blades passing
+          float rpm = (60000.0 / totalTime) * 1;  // 60,000 ms / total time for 4 blades
+
+          // Calculate the circumference of the blade in kilometers
+          float circumference = 2 * 3.14159 * BLADE_RADIUS;  // Circumference in meters
+          float circumferenceInKm = circumference / 1000.0;  // Convert to kilometers
+
+          // Convert RPM to km/h
+          speedKmPerHr = rpm * circumferenceInKm * 60.0;
+
+          // Reset blade count for the next rotation
+          bladeCount = 0;
+        }
+
         previousTime = currentTime;
       }
     } else {
@@ -110,10 +117,15 @@ void loop() {
     }
   }
 
-  // Print the condition count after checking all conditions
-  Serial.print("Condition Count: ");
+  // Print CSV format: temp,moisture,wind_speed,condition_count
+  Serial.print(temp);
+  Serial.print(",");
+  Serial.print(touch);
+  Serial.print(",");
+  Serial.print(speedKmPerHr, 2);
+  Serial.print(",");
   Serial.println(conditionCount);
 
-
+  
   delay(5000);  // Adjusted delay to prevent overloading the serial output
 }
