@@ -101,9 +101,9 @@ void loop() {
   // Print CSV format: temp,moisture,wind_speed,condition_count
   Serial.print(temp);
   Serial.print(",");
-  Serial.print(moisture);
+  Serial.print(touch);
   Serial.print(",");
-  Serial.print(speedKmPerHr);
+  Serial.print(speedKmPerHr, 2);
   Serial.print(",");
   Serial.println(conditionCount);
 
