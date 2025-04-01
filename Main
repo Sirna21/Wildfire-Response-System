@@ -3,72 +3,115 @@
 #include <Adafruit_VL53L0X.h>
 #include <Servo.h>
 
-// Initialize sensors & servo
+// Create an instance of the Adafruit_seesaw class to interact with the sensor
 Adafruit_seesaw ss;
+
+// Initialize the VL53L0X sensor
 Adafruit_VL53L0X lox = Adafruit_VL53L0X();
+
+//initialize pump
 Servo myServo;
 
 // Constants
-const int MOISTURE_THRESHOLD = 740;
-const int TEMP_THRESHOLD = 30;
-const int THRESHOLD = 500;   // Blade detection distance (mm)
-const float DEBOUNCE_TIME = 0.2;  // Avoid multiple detections (sec)
-const float BLADE_RADIUS = 5.0;   // Blade radius in meters
-const int SPEED_THRESHOLD = 30;   // Wind speed threshold (km/h)
+const int MOISTURE_THRESHOLD = 740; // Threshold for moisture (below this = dry soil)
+const int TEMP_THRESHOLD = 30;      // Threshold for temperature (above this = hot)
+const int THRESHOLD = 500;          // Distance threshold (set to detect blade passing)
+const float DEBOUNCE_TIME = 0.2;   // Seconds (to avoid multiple detections per pass)
+const int SPEED_THRESHOLD = 30;     // Threshold for wind speed (above this = strong winds)
 
-unsigned long previousTime = 0; 
+// Blade radius in meters (change this value to match your turbine's blade radius)
+const float BLADE_RADIUS = 5.0;  // Blade radius in meters
+
+// Variables
+unsigned long previousTime = 0; // To store the previous time in milliseconds
+float speedKmPerHr = 0.0;       // Declare speedKmPerHr here for global access
 
 void setup() {
-    Serial.begin(115200);
-    Wire.begin();
+  // Start serial communication for debugging
+  Serial.begin(115200);
+  
+  // Initialize seesaw sensor
+  if (!ss.begin(0x36)) {
+    Serial.println("ERROR! seesaw not found");
+    while (1) delay(1);
+  } else {
+    Serial.println("seesaw started!");
+  }
 
-    // Initialize Seesaw
-    if (!ss.begin(0x36)) {
-        Serial.println("ERROR! Seesaw not found");
-        while (1);
-    }
+  // Initialize I2C communication for VL53L0X
+  Wire.begin();
+  if (!lox.begin()) {
+    Serial.println("Failed to initialize VL53L0X sensor!");
+    while (1);
+  }
+   // Initialize Servo
+  myServo.attach(9);
+  myServo.write(0);  // Full speed clockwise
 
-    // Initialize VL53L0X
-    if (!lox.begin()) {
-        Serial.println("ERROR! VL53L0X not found");
-        while (1);
-    }
 
-    // Initialize Servo
-    myServo.attach(9);
-    myServo.write(0);  // Full speed clockwise
-
-    Serial.println("timestamp,temperature_C,moisture,blade_rpm,wind_speed_kmh");
+  Serial.println("Measuring Wind Turbine Speed...");
 }
 
 void loop() {
-    unsigned long timestamp = millis();
-    float temp = ss.getTemp();
-    uint16_t moisture = ss.touchRead(0);
-    uint16_t distance = lox.readRange();
-    float rpm = 0, wind_speed = 0;
+  int conditionCount = 0;  // Reset condition count for each new reading
 
-    // Detect blade movement
-    if (distance < THRESHOLD) {
-        unsigned long currentTime = millis();
-        if (previousTime != 0 && (currentTime - previousTime) > (DEBOUNCE_TIME * 1000)) {
-            rpm = 60000.0 / (currentTime - previousTime);
-            float circumference_km = (2 * 3.14159 * BLADE_RADIUS) / 1000.0;
-            wind_speed = rpm * circumference_km * 60.0;
-            previousTime = currentTime;
+  unsigned long timestamp = millis();
+  // Read soil moisture and temperature
+  float temp = ss.getTemp();
+  uint16_t touch = ss.touchRead(0);
+
+  // Check moisture condition
+  if (touch <= MOISTURE_THRESHOLD) {
+    conditionCount++;  // Increment count when condition is met
+  }
+
+  // Check temperature condition
+  if (temp >= TEMP_THRESHOLD) {
+    conditionCount++;  // Increment count when condition is met
+  }
+
+  // Read the distance from the VL53L0X sensor
+  uint16_t distance = lox.readRange();
+
+  // Check if the distance is below the threshold (indicating blade passing)
+  if (distance < THRESHOLD) {
+    unsigned long currentTime = millis();  // Get current time in ms
+
+    if (previousTime != 0) {
+      unsigned long deltaTime = currentTime - previousTime;
+
+      // Avoid false multiple detections using debounce time
+      if (deltaTime > DEBOUNCE_TIME * 1000) {
+        float rpm = 60000.0 / deltaTime;  // Calculate RPM (60,000 ms / deltaTime)
+
+        // Calculate the circumference of the blade in kilometers
+        float circumference = 2 * 3.14159 * BLADE_RADIUS;  // Circumference in meters
+        float circumferenceInKm = circumference / 1000.0;  // Convert to kilometers
+
+        // Convert RPM to km/h
+        speedKmPerHr = rpm * circumferenceInKm * 60.0;
+
+        // Check if the wind speed exceeds the threshold for strong winds
+        if (speedKmPerHr >= SPEED_THRESHOLD) {
+          conditionCount++;  // Increment count when wind speed condition is met
         }
+
+        previousTime = currentTime;
+      }
+    } else {
+      // Set initial time
+      previousTime = currentTime;
     }
+  }
 
-    // Print formatted data for InfluxDB
-    Serial.print(timestamp);
-    Serial.print(",");
-    Serial.print(temp, 2);
-    Serial.print(",");
-    Serial.print(moisture);
-    Serial.print(",");
-    Serial.print(rpm, 2);
-    Serial.print(",");
-    Serial.println(wind_speed, 2);
+  // Print CSV format: temp,moisture,wind_speed,condition_count
+  Serial.print(temp);
+  Serial.print(",");
+  Serial.print(touch);
+  Serial.print(",");
+  Serial.print(speedKmPerHr, 2);
+  Serial.print(",");
+  Serial.println(conditionCount);
 
-    delay(1000);  // Send data every second
+  delay(5000);  // Adjusted delay to prevent overloading the serial output
 }
