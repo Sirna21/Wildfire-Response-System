@@ -1,13 +1,12 @@
-void setup() {
-  pinMode(9, OUTPUT);
+#include <Servo.h>
 
-  // Configure Timer1 for Fast PWM (Frequency = 100Hz)
-  TCCR1A = (1 << COM1A1) | (1 << WGM11);  
-  TCCR1B = (1 << WGM13) | (1 << WGM12) | (1 << CS11); // Prescaler = 8
-  ICR1 = 19999;  // Set frequency to 100Hz (10ms period)
+Servo myServo;
+
+void setup() {
+    myServo.attach(9);  // Attach the servo to pin 9
+    myServo.write(0);   // Start spinning at full speed clockwise
 }
 
 void loop() {
-  OCR1A = 1000;  // Set pulse width to 1.0ms (full-speed CW)
-  delay(20);
+    // Keep running without delays
 }
