@@ -1,0 +1,12 @@
+#include <Servo.h>
+
+Servo myServo;
+
+void setup() {
+  myServo.attach(9);  // Attach the servo to pin 9
+}
+
+void loop() {
+  myServo.write(180);  // Set the servo to the maximum position (clockwise)
+  delay(1000);         // Wait for the servo to reach the position
+}
