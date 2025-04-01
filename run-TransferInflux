@@ -20,6 +20,7 @@ const float BLADE_RADIUS = 5.0;  // Blade radius in meters
 
 // Variables
 unsigned long previousTime = 0; // To store the previous time in milliseconds
+float speedKmPerHr = 0.0;       // Declare speedKmPerHr here for global access
 
 void setup() {
   // Start serial communication for debugging
@@ -50,8 +51,6 @@ void loop() {
   float temp = ss.getTemp();
   uint16_t touch = ss.touchRead(0);
 
-  
-
   // Check moisture condition
   if (touch <= MOISTURE_THRESHOLD) {
     conditionCount++;  // Increment count when condition is met
@@ -81,15 +80,13 @@ void loop() {
         float circumferenceInKm = circumference / 1000.0;  // Convert to kilometers
 
         // Convert RPM to km/h
-        float speedKmPerHr = rpm * circumferenceInKm * 60.0;
-
+        speedKmPerHr = rpm * circumferenceInKm * 60.0;
 
         // Check if the wind speed exceeds the threshold for strong winds
         if (speedKmPerHr >= SPEED_THRESHOLD) {
-         
           conditionCount++;  // Increment count when wind speed condition is met
         }
-        
+
         previousTime = currentTime;
       }
     } else {
@@ -107,10 +104,5 @@ void loop() {
   Serial.print(",");
   Serial.println(conditionCount);
 
-
   delay(5000);  // Adjusted delay to prevent overloading the serial output
 }
-
-
-
-
