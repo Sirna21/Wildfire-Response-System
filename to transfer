@@ -1,0 +1,69 @@
+#include "Adafruit_seesaw.h"
+#include <Wire.h>
+#include <Adafruit_VL53L0X.h>
+
+Adafruit_seesaw ss;
+Adafruit_VL53L0X lox = Adafruit_VL53L0X();
+
+const int MOISTURE_THRESHOLD = 740;
+const int TEMP_THRESHOLD = 30;
+const int THRESHOLD = 500;
+const float DEBOUNCE_TIME = 0.2;
+const int SPEED_THRESHOLD = 30;
+const float BLADE_RADIUS = 5.0;
+
+unsigned long previousTime = 0;
+
+void setup() {
+  Serial.begin(115200);
+  if (!ss.begin(0x36)) {
+    Serial.println("ERROR! seesaw not found");
+    while (1) delay(1);
+  }
+
+  Wire.begin();
+  if (!lox.begin()) {
+    Serial.println("Failed to initialize VL53L0X sensor!");
+    while (1);
+  }
+}
+
+void loop() {
+  int conditionCount = 0;
+
+  float temp = ss.getTemp();
+  uint16_t moisture = ss.touchRead(0);
+  
+  if (moisture <= MOISTURE_THRESHOLD) conditionCount++;
+  if (temp >= TEMP_THRESHOLD) conditionCount++;
+
+  uint16_t distance = lox.readRange();
+  float speedKmPerHr = 0;
+
+  if (distance < THRESHOLD) {
+    unsigned long currentTime = millis();
+    if (previousTime != 0) {
+      unsigned long deltaTime = currentTime - previousTime;
+      if (deltaTime > DEBOUNCE_TIME * 1000) {
+        float rpm = 60000.0 / deltaTime;
+        float circumference = 2 * 3.14159 * BLADE_RADIUS;
+        speedKmPerHr = rpm * (circumference / 1000.0) * 60.0;
+        if (speedKmPerHr >= SPEED_THRESHOLD) conditionCount++;
+        previousTime = currentTime;
+      }
+    } else {
+      previousTime = currentTime;
+    }
+  }
+
+  // Print CSV format: temp,moisture,wind_speed,condition_count
+  Serial.print(temp);
+  Serial.print(",");
+  Serial.print(moisture);
+  Serial.print(",");
+  Serial.print(speedKmPerHr);
+  Serial.print(",");
+  Serial.println(conditionCount);
+
+  delay(5000);
+}
