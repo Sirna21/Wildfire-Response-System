@@ -20,7 +20,7 @@ const float DEBOUNCE_TIME = 0.2;   // Seconds (to avoid multiple detections per 
 const int SPEED_THRESHOLD = 30;     // Threshold for wind speed (above this = strong winds)
 
 // Blade radius in meters (change this value to match your turbine's blade radius)
-const float BLADE_RADIUS = 5.0;  // Blade radius in meters
+const float BLADE_RADIUS = 0.07;  // Blade radius in meters
 
 // Variables
 unsigned long previousTime = 0; // To store the previous time in milliseconds
