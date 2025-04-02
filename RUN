@@ -1,11 +1,5 @@
 from(bucket: "WFDS")
-  |> range(start: -1h)  // Select data from the last 1 hour
+  |> range(start: -1h)  // Last 1 hour
   |> filter(fn: (r) => r._measurement == "sensor_data")  // Filter by measurement
-  |> filter(fn: (r) => r._field == "temperature" or r._field == "moisture" or r._field == "wind_speed" or r._field == "condition_count")  // Filter by fields (like SQL's SELECT columns)
-  |> yield(name: "raw_data_last_hour")  // Return the raw data for the last hour (mimicking SQL SELECT)
-
-
-
-
-Error while planning query: SQL error: TokenizerError("Unterminated string literal at Line: 4, Column: 168"): sql parser error: Unterminated string literal at Line: 168: rpc error: code = InvalidArgument desc = Error while planning query: SQL error: TokenizerError("Unterminated string literal at Line: 4, Column: 168"): sql parser error: Unterminated string literal at Line: 168
-Error (47ms)
+  |> filter(fn: (r) => r._field == "temperature" or r._field == "moisture" or r._field == "wind_speed" or r._field == "condition_count")  // Filter by fields
+  |> yield(name: "raw_data_last_hour")  // Return the raw data for the last hour
