@@ -1,5 +1,1 @@
-from(bucket: "WFDS")
-  |> range(start: -1h)  // Last 1 hour
-  |> filter(fn: (r) => r._measurement == "sensor_data")  // Filter by measurement
-  |> filter(fn: (r) => r._field == "temperature" or r._field == "moisture" or r._field == "wind_speed" or r._field == "condition_count")  // Filter by fields
-  |> yield(name: "raw_data_last_hour")  // Return the raw data for the last hour
+Error while planning query: SQL error: ParserError("Expected: an SQL statement, found: from"): sql parser error: Expected: from: rpc error: code = InvalidArgument desc = Error while planning query: SQL error: ParserError("Expected: an SQL statement, found: from"): sql parser error: Expected: from
