@@ -1,46 +1,59 @@
 import serial
-from influxdb_client import InfluxDBClient, Point
+import time
+from influxdb_client import InfluxDBClient, Point, WritePrecision
 
-# Set up Serial connection
-SERIAL_PORT = "/dev/ttyUSB0"  # Change to "COMx" on Windows (e.g., "COM3")
+# ==== CONFIGURE THESE PARAMETERS ==== 
+# Update URL to point to InfluxDB Cloud
+INFLUXDB_URL = "https://us-east-1-1.aws.cloud2.influxdata.com/orgs/ce3ed40405c70a4b/data-explorer?fluxScriptEditor"  # Change to your InfluxDB Cloud endpoint
+INFLUXDB_TOKEN = "IA3Hj33NS_q35IRgH7rm6nL6fmfwlE0Xhx9_dAnmZGSSiFmEZkcbotyk6mIxfHx_0sYV-OXSqqmRCwEcC1-HUw=="  # Your InfluxDB Cloud token
+INFLUXDB_ORG = "P2"  # Your InfluxDB Cloud organization name
+INFLUXDB_BUCKET = "WFDS"  # The bucket where data will be stored
+
+SERIAL_PORT = "COM3"  # Update for your system
 BAUD_RATE = 115200
 
-# InfluxDB Configuration
-INFLUX_URL = "http://localhost:8086"  # Modify if hosted remotely
-INFLUX_TOKEN = "your_influxdb_token"
-INFLUX_ORG = "your_org"
-INFLUX_BUCKET = "sensor_data"
-
-# Open Serial connection
-ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
-
-# Connect to InfluxDB
-client = InfluxDBClient(url=INFLUX_URL, token=INFLUX_TOKEN, org=INFLUX_ORG)
+# Initialize InfluxDB client and write API
+client = InfluxDBClient(url=INFLUXDB_URL, token=INFLUXDB_TOKEN, org=INFLUXDB_ORG)
 write_api = client.write_api()
 
+# ==== CONNECT TO ARDUINO ==== 
 try:
-    while True:
-        line = ser.readline().decode("utf-8").strip()
-        if line:
-            try:
-                temp, moisture, wind_speed, condition_count = map(float, line.split(","))
+    ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
+    time.sleep(2)  # Allow Arduino to initialize
+    print("Connected to Arduino on", SERIAL_PORT)
+except Exception as e:
+    print("Error connecting to Arduino:", e)
+    exit()
 
-                # Write data to InfluxDB
+# ==== READ DATA FROM ARDUINO AND WRITE TO INFLUXDB ==== 
+while True:
+    try:
+        line = ser.readline().decode("utf-8").strip()  # Read data from Arduino
+        if line:
+            print("Received:", line)  # Debugging line
+
+            data = line.split(",")  # Split CSV data
+            if len(data) == 4:  # Check if there are 4 fields (temperature, moisture, wind_speed, condition_count)
+                temp = float(data[0])
+                moisture = int(data[1])
+                wind_speed = float(data[2])
+                condition_count = int(data[3])
+
+                # Create InfluxDB data point WITH TIME
                 point = (
-                    Point("turbine_data")
+                    Point("sensor_data")
                     .field("temperature", temp)
                     .field("moisture", moisture)
                     .field("wind_speed", wind_speed)
                     .field("condition_count", condition_count)
+                    .time(time.time_ns(), WritePrecision.NS)  # Adds a timestamp in nanoseconds
                 )
 
-                write_api.write(bucket=INFLUX_BUCKET, org=INFLUX_ORG, record=point)
-                print(f"Data Sent: {point}")
+                # Write the data point to InfluxDB Cloud
+                write_api.write(bucket=INFLUXDB_BUCKET, org=INFLUXDB_ORG, record=point)
+                print("Data sent to InfluxDB")
 
-            except ValueError:
-                print("Invalid data format:", line)
+    except Exception as e:
+        print("Error:", e)
 
-except KeyboardInterrupt:
-    print("Stopping script...")
-    ser.close()
-    client.close()
+    time.sleep(1)  # Adjust the delay if necessary
