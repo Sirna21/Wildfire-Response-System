@@ -1,0 +1,4 @@
+SELECT time, temperature, moisture, wind_speed, condition_count
+FROM "WFDS"."sensor_data"
+WHERE time > now() - interval '1 minute'
+ORDER BY time DESC;
