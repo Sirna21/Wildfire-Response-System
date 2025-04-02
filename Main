@@ -21,6 +21,8 @@ const int SPEED_THRESHOLD = 30;     // Threshold for wind speed (above this = st
 
 // Blade radius in meters (change this value to match your turbine's blade radius)
 const float BLADE_RADIUS = 0.07;  // Blade radius in meters
+// Number of blades (adjustable for your turbine)
+const int NUM_BLADES = 4;
 
 // Variables
 unsigned long previousTime = 0; // To store the previous time in milliseconds
@@ -83,7 +85,10 @@ void loop() {
       // Avoid false multiple detections using debounce time
       if (deltaTime > DEBOUNCE_TIME * 1000) {
         float rpm = 60000.0 / deltaTime;  // Calculate RPM (60,000 ms / deltaTime)
-
+        
+        // Adjust RPM for the number of blades
+        rpm = rpm / NUM_BLADES;  // Divide by the number of blades to get actual RPM
+        
         // Calculate the circumference of the blade in kilometers
         float circumference = 2 * 3.14159 * BLADE_RADIUS;  // Circumference in meters
         float circumferenceInKm = circumference / 1000.0;  // Convert to kilometers
