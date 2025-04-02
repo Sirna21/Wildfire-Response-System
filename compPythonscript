@@ -1,59 +1,71 @@
 import serial
 import time
+import csv
+import pandas as pd
 from influxdb_client import InfluxDBClient, Point, WritePrecision
 
 # ==== CONFIGURE THESE PARAMETERS ==== 
-# Update URL to point to InfluxDB Cloud
-INFLUXDB_URL = "https://us-east-1-1.aws.cloud2.influxdata.com/orgs/ce3ed40405c70a4b/data-explorer?fluxScriptEditor"  # Change to your InfluxDB Cloud endpoint
-INFLUXDB_TOKEN = "IA3Hj33NS_q35IRgH7rm6nL6fmfwlE0Xhx9_dAnmZGSSiFmEZkcbotyk6mIxfHx_0sYV-OXSqqmRCwEcC1-HUw=="  # Your InfluxDB Cloud token
-INFLUXDB_ORG = "P2"  # Your InfluxDB Cloud organization name
-INFLUXDB_BUCKET = "WFDS"  # The bucket where data will be stored
-
-SERIAL_PORT = "COM3"  # Update for your system
+INFLUXDB_URL = "https://us-east-1-1.aws.cloud2.influxdata.com"
+INFLUXDB_TOKEN = "your_token_here"
+INFLUXDB_ORG = "P2"
+INFLUXDB_BUCKET = "WFDS"
+SERIAL_PORT = "COM3"
 BAUD_RATE = 115200
+CSV_FILE = "sensor_data.csv"
 
-# Initialize InfluxDB client and write API
+# Initialize InfluxDB client
 client = InfluxDBClient(url=INFLUXDB_URL, token=INFLUXDB_TOKEN, org=INFLUXDB_ORG)
 write_api = client.write_api()
 
 # ==== CONNECT TO ARDUINO ==== 
 try:
     ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
-    time.sleep(2)  # Allow Arduino to initialize
+    time.sleep(2)
     print("Connected to Arduino on", SERIAL_PORT)
 except Exception as e:
     print("Error connecting to Arduino:", e)
     exit()
 
-# ==== READ DATA FROM ARDUINO AND WRITE TO INFLUXDB ==== 
+# Function to append data to CSV
+def log_data_to_csv(timestamp, temp, moisture, wind_speed, condition_count):
+    with open(CSV_FILE, mode="a", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow([timestamp, temp, moisture, wind_speed, condition_count])
+
+# Function to upload CSV data to InfluxDB
+def upload_to_influxdb():
+    df = pd.read_csv(CSV_FILE, names=["timestamp", "temperature", "moisture", "wind_speed", "condition_count"], skiprows=1)
+    
+    for _, row in df.iterrows():
+        point = (
+            Point("sensor_data")
+            .time(int(row["timestamp"]), WritePrecision.NS)
+            .field("temperature", float(row["temperature"]))
+            .field("moisture", int(row["moisture"]))
+            .field("wind_speed", float(row["wind_speed"]))
+            .field("condition_count", int(row["condition_count"]))
+        )
+        write_api.write(bucket=INFLUXDB_BUCKET, org=INFLUXDB_ORG, record=point)
+    print("Data uploaded to InfluxDB successfully!")
+
+# ==== READ DATA FROM ARDUINO AND LOG TO CSV/INFLUXDB ==== 
 while True:
     try:
-        line = ser.readline().decode("utf-8").strip()  # Read data from Arduino
+        line = ser.readline().decode("utf-8").strip()
         if line:
-            print("Received:", line)  # Debugging line
-
-            data = line.split(",")  # Split CSV data
-            if len(data) == 4:  # Check if there are 4 fields (temperature, moisture, wind_speed, condition_count)
-                temp = float(data[0])
-                moisture = int(data[1])
-                wind_speed = float(data[2])
-                condition_count = int(data[3])
-
-                # Create InfluxDB data point WITH TIME
-                point = (
-                    Point("sensor_data")
-                    .field("temperature", temp)
-                    .field("moisture", moisture)
-                    .field("wind_speed", wind_speed)
-                    .field("condition_count", condition_count)
-                    .time(time.time_ns(), WritePrecision.NS)  # Adds a timestamp in nanoseconds
-                )
-
-                # Write the data point to InfluxDB Cloud
-                write_api.write(bucket=INFLUXDB_BUCKET, org=INFLUXDB_ORG, record=point)
-                print("Data sent to InfluxDB")
-
+            print("Received:", line)
+            data = line.split(",")
+            if len(data) == 4:
+                timestamp = time.time_ns()
+                temp, moisture, wind_speed, condition_count = float(data[0]), int(data[1]), float(data[2]), int(data[3])
+                
+                log_data_to_csv(timestamp, temp, moisture, wind_speed, condition_count)
+                print(f"Logged data: {timestamp}, {temp}, {moisture}, {wind_speed}, {condition_count}")
+                
+                if sum(1 for _ in open(CSV_FILE)) % 10 == 0:
+                    upload_to_influxdb()
+    
     except Exception as e:
         print("Error:", e)
-
-    time.sleep(1)  # Adjust the delay if necessary
+    
+    time.sleep(1)
